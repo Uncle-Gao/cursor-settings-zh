@@ -95,6 +95,12 @@ npm run build -w desktop-app
 - Node.js 18+
 - Cursor or Claude desktop application installed
 
+## Support
+
+If this project helps you, you can support its maintenance through WeChat Reward.
+
+![WeChat Reward QR Code](.github/funding/wechat-reward.jpg)
+
 ## Security
 
 - **Encrypted API Key Storage**: Saved encrypted via Electron `safeStorage` to `~/.live_translator_hub/api_keys.enc`, not written to configuration files

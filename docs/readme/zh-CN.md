@@ -95,6 +95,12 @@ npm run build -w desktop-app
 - Node.js 18+
 - Cursor 或 Claude 桌面应用已安装
 
+## 支持项目
+
+如果这个项目对你有帮助，可以通过微信赞赏支持维护。
+
+![微信赞赏码](../../.github/funding/wechat-reward.jpg)
+
 ## 安全性
 
 - **API 密钥加密存储**：通过 Electron `safeStorage` 加密保存至 `~/.live_translator_hub/api_keys.enc`，不写入配置文件
