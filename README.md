@@ -99,7 +99,9 @@ npm run build -w desktop-app
 
 If this project helps you, you can support its maintenance through WeChat Reward.
 
-![WeChat Reward QR Code](.github/funding/wechat-reward.jpg)
+<p align="center">
+  <img src=".github/funding/wechat-reward.jpg" alt="WeChat Reward QR Code" width="50%">
+</p>
 
 ## Security
 
