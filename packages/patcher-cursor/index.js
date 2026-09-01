@@ -101,8 +101,41 @@ function getPluginPaths() {
 function getPaths(customRoot = null) {
     let appRoot = customRoot;
     if (appRoot && !fs.existsSync(path.join(appRoot, 'product.json'))) {
-        const sub = path.join(appRoot, 'resources', 'app');
-        if (fs.existsSync(path.join(sub, 'product.json'))) appRoot = sub;
+        const platform = process.platform;
+        // 第一步：尝试常见的子路径（用户可能选了 .app bundle 或安装目录）
+        // macOS .app bundle → Contents/Resources/app
+        // Windows/Linux install dir → resources/app
+        const subCandidates = [
+            platform === 'darwin' ? path.join(appRoot, 'Contents', 'Resources', 'app') : null,
+            path.join(appRoot, 'resources', 'app'),
+        ].filter(Boolean);
+        const matched = subCandidates.find(p => fs.existsSync(path.join(p, 'product.json')));
+        if (matched) {
+            appRoot = matched;
+        } else if (fs.statSync(appRoot).isDirectory()) {
+            // 第二步：兜底——用户可能选了父目录（如 /Volumes/外置/Applications/），
+            // 扫描一层子目录找带 "cursor" 关键字的 .app 或安装目录
+            try {
+                const scanResult = fs.readdirSync(appRoot)
+                    .map(name => path.join(appRoot, name))
+                    .filter(p => {
+                        try { return fs.statSync(p).isDirectory(); } catch { return false; }
+                    })
+                    .filter(p => {
+                        const base = path.basename(p).toLowerCase();
+                        return base.includes('cursor');
+                    })
+                    .map(p => {
+                        // 对每个候选子目录，尝试多种 app 内部结构
+                        const app = platform === 'darwin'
+                            ? path.join(p, 'Contents', 'Resources', 'app')
+                            : path.join(p, 'resources', 'app');
+                        return fs.existsSync(path.join(app, 'product.json')) ? app : null;
+                    })
+                    .find(Boolean);
+                if (scanResult) appRoot = scanResult;
+            } catch {}
+        }
     }
     if (!appRoot) {
         const platform = process.platform;

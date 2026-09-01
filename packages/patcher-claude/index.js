@@ -158,12 +158,32 @@ function resolveResourcesPath(customRoot = null) {
             path.join(customRoot, 'resources'),
             customRoot,
         ].filter(Boolean);
-        // Also scan app-* subdirs in case user selected the Squirrel parent dir
+        // Squirrel installer: 扫描 app-* 子目录
         try {
             fs.readdirSync(customRoot)
                 .filter(d => d.startsWith('app-'))
                 .sort().reverse()
                 .forEach(d => candidates.push(path.join(customRoot, d, 'resources')));
+        } catch {}
+        // 兜底：扫描一层子目录找带 "claude" 关键字的 .app / 安装目录
+        // （用户在 macOS 选择器里点不到 .app bundle，可能选了父目录如 /Applications/）
+        try {
+            fs.readdirSync(customRoot)
+                .map(name => path.join(customRoot, name))
+                .filter(p => {
+                    try { return fs.statSync(p).isDirectory(); } catch { return false; }
+                })
+                .filter(p => {
+                    const base = path.basename(p).toLowerCase();
+                    return base.includes('claude');
+                })
+                .forEach(p => {
+                    if (platform === 'darwin') {
+                        candidates.push(path.join(p, 'Contents', 'Resources'));
+                    } else {
+                        candidates.push(path.join(p, 'resources'));
+                    }
+                });
         } catch {}
         return candidates.find(p => fs.existsSync(path.join(p, 'app.asar'))) || null;
     }
