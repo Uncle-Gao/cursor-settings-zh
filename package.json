@@ -10,5 +10,94 @@
     "dev": "npm run dev -w desktop-app",
     "version:bump": "node scripts/bump-workspace-version.js",
     "version:check": "node scripts/check-workspace-versions.js"
+  },
+  "overrides": {
+    "@electron/asar": {
+      "brace-expansion": "5.0.9"
+    },
+    "@electron/rebuild": {
+      "brace-expansion": "5.0.9"
+    },
+    "@electron/universal": {
+      "brace-expansion": "5.0.9"
+    },
+    "@eslint-community/eslint-utils": {
+      "brace-expansion": "5.0.9"
+    },
+    "@eslint/config-array": {
+      "brace-expansion": "5.0.9"
+    },
+    "@eslint/js": {
+      "brace-expansion": "5.0.9"
+    },
+    "@npmcli/move-file": {
+      "brace-expansion": "5.0.9"
+    },
+    "app-builder-lib": {
+      "brace-expansion": "5.0.9"
+    },
+    "archiver": {
+      "brace-expansion": "5.0.9"
+    },
+    "archiver-utils": {
+      "brace-expansion": "5.0.9"
+    },
+    "brace-expansion": "5.0.9",
+    "cacache": {
+      "brace-expansion": "5.0.9"
+    },
+    "config-file-ts": {
+      "brace-expansion": "5.0.9"
+    },
+    "dir-compare": "4.2.0",
+    "dmg-builder": {
+      "brace-expansion": "5.0.9"
+    },
+    "ejs": {
+      "brace-expansion": "5.0.9"
+    },
+    "electron-builder": {
+      "brace-expansion": "5.0.9"
+    },
+    "electron-builder-squirrel-windows": {
+      "brace-expansion": "5.0.9"
+    },
+    "eslint": {
+      "brace-expansion": "5.0.9"
+    },
+    "eslint-plugin-react-hooks": {
+      "brace-expansion": "5.0.9"
+    },
+    "eslint-plugin-react-refresh": {
+      "brace-expansion": "5.0.9"
+    },
+    "filelist": {
+      "brace-expansion": "5.0.9"
+    },
+    "glob": "11.1.0",
+    "i18next-cli": {
+      "brace-expansion": "5.0.9"
+    },
+    "jake": {
+      "brace-expansion": "5.0.9"
+    },
+    "make-fetch-happen": {
+      "brace-expansion": "5.0.9"
+    },
+    "minimatch": {
+      "brace-expansion": "5.0.9"
+    },
+    "node-gyp": {
+      "brace-expansion": "5.0.9"
+    },
+    "readdir-glob": {
+      "brace-expansion": "5.0.9"
+    },
+    "rimraf": {
+      "brace-expansion": "5.0.9"
+    },
+    "zip-stream": {
+      "brace-expansion": "5.0.9"
+    }
   }
 }
