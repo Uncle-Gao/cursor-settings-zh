@@ -2,7 +2,110 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 const protectionDefaults = require('@live-translator/core/src/protection-defaults.json');
+
+/**
+ * 从 Cursor.app/Contents/Resources/app 路径向上推导 .app bundle 根目录
+ * 用 path.resolve 代替硬编码字符串 replace，避免路径中包含特殊字符时出错
+ */
+function resolveAppBundlePath(appRoot) {
+    // appRoot 形如 .../Cursor.app/Contents/Resources/app
+    // 向上走 3 级：app → Resources → Contents → .app bundle
+    return path.resolve(appRoot, '..', '..', '..');
+}
+
+/**
+ * 执行 shell 命令，支持超时、TCC 权限检测和自动重试
+ * 模仿 ClaudePatcher._execScript 的设计模式
+ * @param {string} cmd - 要执行的 shell 命令
+ * @param {object} hooks - 回调钩子 { onProgress, onTCCBlocked }
+ * @param {object} options - { timeout: 毫秒, maxRetries: 重试次数 }
+ */
+async function runMacCommand(cmd, hooks = {}, options = {}) {
+    const { onProgress = () => {}, onTCCBlocked = () => {} } = hooks;
+    const timeout = options.timeout || 120000;       // 默认 2 分钟超时（codesign 在大磁盘上可能较慢）
+    const maxRetries = options.maxRetries || 40;    // 最多重试 40 次
+    const retryInterval = 3000;                     // 每次间隔 3 秒
+
+    // 先写一个临时脚本文件，避免内联命令的转义问题
+    const scriptPath = path.join(os.tmpdir(), 'cursor-codesign-' + Date.now() + '.sh');
+    const scriptContent = `#!/bin/sh
+set -e
+${cmd}
+`;
+    fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
+
+    const tryRun = () => {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const child = spawn('sh', [scriptPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+            const timer = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    child.kill('SIGKILL');
+                    reject(new Error('命令执行超时（' + timeout + 'ms）'));
+                }
+            }, timeout);
+
+            let stderr = '';
+            child.stderr.on('data', (d) => { stderr += d.toString(); });
+            child.on('error', (err) => {
+                if (!settled) { settled = true; clearTimeout(timer); reject(err); }
+            });
+            child.on('close', (code) => {
+                if (!settled) {
+                    settled = true;
+                    clearTimeout(timer);
+                    if (code === 0) {
+                        resolve();
+                    } else {
+                        reject(new Error(stderr.trim() || '命令以退出码 ' + code + ' 失败'));
+                    }
+                }
+            });
+        });
+    };
+
+    try {
+        await tryRun();
+        try { fs.unlinkSync(scriptPath); } catch {}
+        return { ok: true };
+    } catch (err) {
+        const msg = err.message;
+        const isTCC = msg.includes('Operation not permitted') || msg.includes('Permission denied') || msg.includes('不允许');
+
+        if (!isTCC) {
+            try { fs.unlinkSync(scriptPath); } catch {}
+            throw err;
+        }
+
+        // TCC 权限被阻止，通知用户并自动重试
+        onTCCBlocked();
+        onProgress('⚠️ macOS 阻止了文件操作，已打开系统设置。请在「隐私与安全性」中点击「允许」，程序将自动重试...');
+
+        for (let i = 0; i < maxRetries; i++) {
+            await new Promise(r => setTimeout(r, retryInterval));
+            onProgress('正在重试 (' + (i + 1) + '/' + maxRetries + ')...');
+            try {
+                await tryRun();
+                try { fs.unlinkSync(scriptPath); } catch {}
+                return { ok: true };
+            } catch (retryErr) {
+                const retryMsg = retryErr.message;
+                const stillTCC = retryMsg.includes('Operation not permitted') || retryMsg.includes('Permission denied') || retryMsg.includes('不允许');
+                if (!stillTCC) {
+                    try { fs.unlinkSync(scriptPath); } catch {}
+                    throw retryErr;
+                }
+            }
+        }
+
+        try { fs.unlinkSync(scriptPath); } catch {}
+        throw new Error('授权超时，请在系统设置→隐私与安全性中允许应用修改权限后重新部署。');
+    }
+}
 
 const DEFAULT_SKIPS = [
     ".monaco-breadcrumbs", ".view-lines.monaco-mouse-cursor-text", ".monaco-list-row",
@@ -478,14 +581,20 @@ class CursorPatcher {
         fs.writeFileSync(paths.productJson, JSON.stringify(product, null, '\t'), 'utf8');
 
         if (process.platform === 'darwin') {
-            onProgress('修复 macOS 签名...');
-            const { execSync } = require('child_process');
-            const appBundle = paths.root.replace('/Contents/Resources/app', '');
+            const appBundle = resolveAppBundlePath(paths.root);
+            onProgress('修复 macOS 签名（xattr + codesign）...');
+            onProgress('⚠️ codesign 正在签名 .app bundle，Cursor 应用较大时可能需要 30-60 秒，请耐心等待...');
+            const onTCCBlocked = hooks.onTCCBlocked || (() => {});
             try {
-                execSync(`xattr -cr "${appBundle}"`);
-                execSync(`codesign --force --deep --sign - "${appBundle}"`);
+                // 组合 xattr 清除 + codesign 签名到一个脚本，原子执行
+                const signedCmd = `xattr -rd com.apple.quarantine "${appBundle}" || true
+xattr -cr "${appBundle}"
+codesign --force --deep --sign - "${appBundle}"`;
+                await runMacCommand(signedCmd, { onProgress, onTCCBlocked }, { timeout: 300000 });
+                onProgress('✅ macOS 签名修复完成');
             } catch (e) {
                 console.error('macOS codesign failed:', e);
+                throw new Error('macOS 签名失败: ' + e.message);
             }
         }
 
@@ -550,14 +659,19 @@ class CursorPatcher {
             fs.writeFileSync(paths.productJson, JSON.stringify(product, null, '\t'), 'utf8');
 
             if (process.platform === 'darwin') {
-                onProgress('修复 macOS 签名...');
-                const { execSync } = require('child_process');
-                const appBundle = paths.root.replace('/Contents/Resources/app', '');
+                const appBundle = resolveAppBundlePath(paths.root);
+                onProgress('修复 macOS 签名（xattr + codesign）...');
+                onProgress('⚠️ codesign 正在签名 .app bundle，Cursor 应用较大时可能需要 30-60 秒，请耐心等待...');
+                const onTCCBlocked = hooks.onTCCBlocked || (() => {});
                 try {
-                    execSync(`xattr -cr "${appBundle}"`);
-                    execSync(`codesign --force --deep --sign - "${appBundle}"`);
+                    const signedCmd = `xattr -rd com.apple.quarantine "${appBundle}" || true
+xattr -cr "${appBundle}"
+codesign --force --deep --sign - "${appBundle}"`;
+                    await runMacCommand(signedCmd, { onProgress, onTCCBlocked }, { timeout: 300000 });
+                    onProgress('✅ macOS 签名修复完成');
                 } catch (e) {
                     console.error('macOS codesign failed:', e);
+                    throw new Error('macOS 签名失败: ' + e.message);
                 }
             }
             onProgress('恢复官方原版成功！');
