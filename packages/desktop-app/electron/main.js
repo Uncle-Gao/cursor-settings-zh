@@ -511,7 +511,10 @@ ipcMain.handle('i18n:restoreClaude', async () => {
 
 ipcMain.handle('app:browsePath', async (_, targetApp) => {
   const result = await dialog.showOpenDialog({
-    properties: ['openDirectory'],
+    // macOS 上 .app bundle 在 openDirectory 模式下会被"钻进去"而非"选中"，
+    // 同时加 openFile 让用户可以直接选中 .app；treatPackageAsDirectory: false
+    // 确保 Finder 把 .app 当成可选中的文件包而非普通目录。
+    properties: ['openDirectory', 'openFile'],
     title: targetApp === 'cursor' ? '选择 Cursor 应用目录' : '选择 Claude 应用目录',
     defaultPath: process.platform === 'darwin'
       ? '/Applications'
